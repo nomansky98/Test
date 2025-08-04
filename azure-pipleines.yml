@@ -1,36 +1,40 @@
+# azure-pipelines.yml (in GitHub/Test)
 trigger:
   branches:
     include:
-      - main    # run on every push to GitHub/Test main
+      - main
 
 pool:
   vmImage: ubuntu-latest
 
 steps:
-  # The 'self' checkout here is your GitHub repo (with azure-pipelines.yml + test.html)
-  - checkout: self
+  - checkout: self   # this is your GitHub/Test repo
 
-  # Mirror step
-  - script: |
+  - bash: |
+      set -e
+
       echo "🔐 Cloning private Azure DevOps repo..."
-      git clone https://$(AZDO_PAT)@dev.azure.com/zalaris/Zalaris%20IT%20Infrastructure/_git/Zalaris%20IT%20Infra%20-%20Netbox azureRepo
+      # Use the env var $AZDO_PAT, not $(AZDO_PAT), inside the shell
+      git clone https://$AZDO_PAT@dev.azure.com/zalaris/Zalaris%20IT%20Infrastructure/_git/Zalaris%20IT%20Infra%20-%20Netbox azureRepo
+
+      echo "✅ Clone complete: $(ls -1 azureRepo | sed -e 's/^/   /')"
 
       echo "📄 Copying test.html into azureRepo/"
       cp test.html azureRepo/test.html
 
       echo "✏️  Committing & pushing if changed..."
       cd azureRepo
-      git config user.name "azure-pipelines"
+
+      git config user.name  "azure-pipelines"
       git config user.email "builds@dev.azure.com"
 
       git add test.html
-      if ! git diff --cached --quiet; then
-        git commit -m "🔄 Sync test.html from GitHub @${BUILD_SOURCEVERSION}"
-        git push
-      else
+      if git diff --cached --quiet; then
         echo "⚡ No changes to commit."
+      else
+        git commit -m "🔄 Sync test.html from GitHub @${BUILD_SOURCEVERSION}"
+        git push origin main
       fi
     displayName: 'Mirror test.html to Azure DevOps'
     env:
-      # Must be indented under the step, not inside the script
       AZDO_PAT: $(System.AccessToken)
