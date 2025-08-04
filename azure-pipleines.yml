@@ -1,72 +1,31 @@
-# trigger:
-#   branches:
-#     include:
-#       - main
+# azure-pipelines.yml  (now in GitHub/Test)
 
-# resources:
-#   repositories:
-#     - repository: githubTest
-#       type: github
-#       name: nomansky98/Test   # e.g. Contoso/Test
-#       endpoint: SSOC_List
-
-trigger: none
-
-resources:
-  repositories:
-    - repository: githubTest
-      type: github
-      name: nomansky98/Test
-      endpoint: SSOC_List
-      trigger:
-        branches:
-          include:
-            - main
-
+trigger:
+  branches:
+    include:
+      - main      # or whatever branch you use
 
 pool:
   vmImage: ubuntu-latest
 
 steps:
-  # 1) Checkout your Azure DevOps repo into ./azureRepo
-  - checkout: self
-    persistCredentials: true
-    path: azureRepo
+  # 1) Checkout this GitHub repo (automatically done)
+  - checkout: self   
 
-  # 2) Checkout the GitHub 'Test' repo into ./githubTest
-  - checkout: githubTest
-    path: githubTest
-
-  # 3) Locate test.html under githubTest and copy it into azureRepo
+  # 2) Copy test.html into an Azure-managed clone of your private repo
   - script: |
-      echo "🔍 Searching for test.html in $(Pipeline.Workspace)/githubTest..."
-      SRC=$(find "$(Pipeline.Workspace)/githubTest" -type f -name test.html | head -n1)
-      if [ -z "$SRC" ]; then
-        echo "❌ ERROR: test.html not found!"
-        exit 1
-      fi
-      echo "✅ Found at $SRC"
-      echo "⤷ Copying into azureRepo/test.html"
-      cp "$SRC" "$(Pipeline.Workspace)/azureRepo/test.html"
-    displayName: 'Locate & copy test.html'
-
-  # 4) Commit & push from inside azureRepo to the same branch
-  - script: |
-      cd "$(Pipeline.Workspace)/azureRepo"
-      echo "📂 In repo: $(pwd)"
-      git status
-
-      git config user.name "Azure Pipelines"
+      git clone https://$(AZDO_PAT)@dev.azure.com/zalaris/Zalaris%20IT%20Infrastructure/_git/Zalaris%20IT%20Infra%20-%20Netbox azureRepo
+      cp test.html azureRepo/test.html
+      cd azureRepo
+      git config user.name "azure-pipelines"
       git config user.email "builds@dev.azure.com"
-
       git add test.html
       if ! git diff --cached --quiet; then
         git commit -m "🔄 Sync test.html from GitHub @$(Build.SourceVersion)"
-        # Push this new commit into your target branch (e.g. main)
-        git push origin HEAD:$(Build.SourceBranchName)
+        git push origin main
       else
-        echo "⚡ No changes to commit."
+        echo "No changes to commit."
       fi
-    displayName: 'Commit & push to Azure Repo'
+    displayName: 'Mirror test.html to Azure DevOps'
     env:
-      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+      AZDO_PAT: $(System.AccessToken)
